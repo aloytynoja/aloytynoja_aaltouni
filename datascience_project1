@@ -1,0 +1,199 @@
+# Data Science, project work
+
+#Section 2: Data exploration. 
+# - Correlation
+# - Pair plots
+# - PCA
+
+
+# First, let's set everything up. Below, there is copied the setting up code from Computer exercises 3 and 4
+
+# Set the printing option
+%matplotlib inline
+
+# Execute this cell to load required modules
+import numpy as np
+import matplotlib.pyplot as plt
+import pandas as pd
+from scipy import spatial
+from scipy.stats import norm
+from scipy.cluster.hierarchy import dendrogram, linkage
+import scipy
+import time
+from sklearn.cluster import KMeans
+import random as rnd
+import collections
+import math
+from numpy import matlib as mtl
+import seaborn as sns
+
+
+#Import and read the data:
+
+train_x = pd.read_csv('football_train_x.csv')
+train_y = pd.read_csv('football_train_y.csv')
+test_x = pd.read_csv('football_test_x.csv')
+test_y = pd.read_csv('football_test_y.csv')
+
+#Read the datasets by uncommenting the lines below:
+#train_x
+#train_y
+#test_x
+#test_y
+
+
+# 1.
+
+#First, let's plot a correlation matrix of all features.
+#For that, let's first combine all data into a single dataframe and, then,
+#use the pre-defined command to plot the matrix.
+
+#Train sets concatenated:
+all_trains = pd.concat([train_y, train_x], axis=1)
+#Test sets concatenated:
+all_tests = pd.concat([test_y, test_x], axis=1)
+#Everything concatenated:
+all_data = pd.concat([all_trains, all_tests])
+
+#Correlation matrix for the whole data:
+all_data_corr = all_data.corr()
+print(all_data_corr)
+
+
+# 2.
+
+#Pair plots
+
+#There is nothing about pair plots in course material. Thus, hopefully this is good enough.
+#Most of the code is courtesy of Will Koehrsen by Towards Data Science
+#(https://towardsdatascience.com/visualizing-data-with-pair-plots-in-python-f228cf529166)
+
+#Default pairplot of all 15 variables
+sns.pairplot(all_data, diag_kind = 'kde')
+
+#Pair grid for 7 attributes: Interest, FTG, HTHG, HTAG, HST, AST, HTR
+
+def corr(x, y, **kwargs):
+    coef = np.corrcoef(x, y)[0][1]
+    label = r'$\rho$ = ' + str(round(coef, 2)) 
+    # Add the label to the plot
+    ax = plt.gca()
+    ax.annotate(label, xy = (0.2, 0.95), size = 20, xycoords = ax.transAxes)
+
+grid = sns.PairGrid(data = all_data, vars = ['Interest', 'FTG', 'HTHG', 'HTAG', 'HST', 'AST', 'HTR' ])
+grid = grid.map_upper(plt.scatter)
+grid = grid.map_upper(corr)
+grid = grid.map_diag(sns.kdeplot, shade = True, color = 'r')
+grid = grid.map_lower(sns.kdeplot, cmap = 'Blues')
+
+
+# 3.
+
+#Principal Component Analysis (PCA): let's conduct a PC analysis and make
+#a PCA projection using the first 2 components. Then, let's plot the
+#cumulative explained variance.
+
+#Preparation: standardize and normalize the dataset
+
+#Standardisation
+mean = all_data.mean(axis=0)
+std = all_data.std(axis=0)
+all_data_std = (all_data - mean)/std
+
+#Normalisation
+all_data_norm = (all_data - all_data.min(axis=0))/(all_data.max(axis=0) - all_data.min(axis=0))
+
+#Eigenvalues and eigenvectors for conducting the PCA:
+
+#Eigenvalues and eigenvectors calculated from the covariance matrix:
+eigenValues, eigenVectors = np.linalg.eig(all_data_corr)
+
+#Sort (in place) from largest to smallest eigenvalue and then sort the eigenvectors in the same order
+idx = eigenValues.argsort()[::-1]
+eigenValues = eigenValues[idx]
+eigenVectors = eigenVectors[:, idx]
+
+#PCA dataframe
+pca_df = pd.DataFrame()
+for i in range(eigenVectors.shape[1]):
+        pca_df['PCA_cmp' + str(i + 1)] = eigenVectors[:, i] @ all_data_std.T
+        
+#Cumulative explained variance
+
+# Helper function to explain variance
+def explain_variance(orig_var, pca_var):
+    orig_var_total = sum(orig_var)
+    pca_var_total = sum(pca_var)
+
+    # cumsum()
+    orig_cum = np.cumsum(orig_var)
+    pca_cum = np.cumsum(pca_var)
+
+    # turn cumsum() to percentages
+    orig_cum = [x / orig_var_total for x in orig_cum]
+    pca_cum = [x / pca_var_total for x in pca_cum]
+    
+    for i in range(len(pca_cum)):
+        print(f'Percentage covered by PCA with {i+1} dimension: {pca_cum[i]}')
+
+    print('Original var cumsum\n', orig_cum)
+    print('Var cumsum after pca\n', pca_cum)
+
+    f, ax = plt.subplots()
+    ax.plot(range(1, 1 + len(orig_cum)), orig_cum, '--bo', label='Original variance per column')
+    ax.plot(range(1, 1 + len(pca_cum)), pca_cum, '-ro', label='PCA explained variance per component')
+    plt.minorticks_on()
+    plt.grid(b=True, which='major', linestyle='-')
+    plt.grid(b=True, which='minor', linestyle=':')
+    plt.show()
+
+# Compute variances by column
+orig_var = all_data_norm.var().tolist()
+pca_var = pca_df.var().tolist()
+
+explain_variance(orig_var, pca_var)
+
+#Plot the first 2 features of the data and, then, the same data projected into 2 first principal components
+
+# Helper function for plotting
+def plot_2d(df, title="", withMean=False, myX=1, myY=2):
+    """
+    Plots 2 components of the data from df, using self.interactive to show the name of
+    the food when hovering with the mouse.
+    :param title: str, the title of the plot
+            Default: empty string
+    :param withMean: bool, when True the mean of the data is shown with a red cross
+            Default: False
+    :param myX: int (it can take 1, 2, or 3 as values, and it must be different from myY),
+            is the component used as X axis
+            Default: 1 (first numerical column)
+    :param myY: int (it can take 1, 2, or 3 as values, and it must be different from myX),
+            is the component used as Y axis
+            Default: 2 (second numerical column)
+    :return: None
+    """
+    f, ax = plt.subplots()
+
+    if withMean:
+        ax.scatter(df[df.columns[myX]].mean(), df[df.columns[myY]].mean(),
+                   marker='x', s=169, linewidths=3, color='r', zorder=10)
+        
+    sc = plt.scatter(df[df.columns[myX]], df[df.columns[myY]], cmap='rainbow', s=10, alpha=0.8)
+ 
+    axes = [min(df[df.columns[0]]), max(df[df.columns[0]]),
+            min(df[df.columns[1]]), max(df[df.columns[1]])]
+    
+    plt.axis(axes)
+
+    ax.set_xlabel(df.columns[myX])
+    ax.set_ylabel(df.columns[myY])
+
+    plt.title(title)
+
+    plt.show()
+    
+# Plot first 2 features of the original data
+plot_2d(all_data, title='Original Data', myX=0, myY=1)
+
+# Plot data after PCA for first 2 components of the PCA
+plot_2d(pca_df, title='PCA', myX=0, myY=1)
