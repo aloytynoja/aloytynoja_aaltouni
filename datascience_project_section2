@@ -36,10 +36,10 @@ test_x = pd.read_csv('football_test_x.csv')
 test_y = pd.read_csv('football_test_y.csv')
 
 #Read the datasets by uncommenting the lines below:
-#train_x
-#train_y
-#test_x
-#test_y
+#print(train_x)
+#print(train_y)
+#print(test_x)
+#print(test_y)
 
 
 # 1.
@@ -48,10 +48,10 @@ test_y = pd.read_csv('football_test_y.csv')
 #For that, let's first combine all data into a single dataframe and, then,
 #use the pre-defined command to plot the matrix.
 
-#Train sets concatenated:
-all_trains = pd.concat([train_y, train_x], axis=1)
-#Test sets concatenated:
-all_tests = pd.concat([test_y, test_x], axis=1)
+#Train sets concatenated, without the classification layer "Interest":
+all_trains = pd.concat([train_y[train_y.columns[1]], train_x], axis=1)
+#Test sets concatenated, without the classification layer "Interest":
+all_tests = pd.concat([test_y[test_y.columns[1]], test_x], axis=1)
 #Everything concatenated:
 all_data = pd.concat([all_trains, all_tests])
 
@@ -68,10 +68,10 @@ print(all_data_corr)
 #Most of the code is courtesy of Will Koehrsen by Towards Data Science
 #(https://towardsdatascience.com/visualizing-data-with-pair-plots-in-python-f228cf529166)
 
-#Default pairplot of all 15 variables
+#Default pairplot of all 14 variables (13 features + dependent variable FTG)
 sns.pairplot(all_data, diag_kind = 'kde')
 
-#Pair grid for 7 attributes: Interest, FTG, HTHG, HTAG, HST, AST, HTR
+#Pair grid for 6 features: FTG, HTHG, HTAG, HST, AST, HTR
 
 def corr(x, y, **kwargs):
     coef = np.corrcoef(x, y)[0][1]
@@ -80,7 +80,7 @@ def corr(x, y, **kwargs):
     ax = plt.gca()
     ax.annotate(label, xy = (0.2, 0.95), size = 20, xycoords = ax.transAxes)
 
-grid = sns.PairGrid(data = all_data, vars = ['Interest', 'FTG', 'HTHG', 'HTAG', 'HST', 'AST', 'HTR' ])
+grid = sns.PairGrid(data = all_data, vars = [ 'FTG', 'HTHG', 'HTAG', 'HST', 'AST', 'HTR' ])
 grid = grid.map_upper(plt.scatter)
 grid = grid.map_upper(corr)
 grid = grid.map_diag(sns.kdeplot, shade = True, color = 'r')
