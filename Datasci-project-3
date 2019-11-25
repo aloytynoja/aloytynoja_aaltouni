@@ -1,0 +1,246 @@
+#Data Science, project work
+#Section 3: Regression
+
+#First, let's set everything up:
+
+# Set the printing option
+%matplotlib inline
+# Execute this cell to load required modules
+import numpy as np
+import matplotlib.pyplot as plt
+import pandas as pd
+from scipy import spatial
+from scipy.stats import norm
+from scipy.cluster.hierarchy import dendrogram, linkage
+import scipy
+import sklearn
+import time
+from sklearn.cluster import KMeans
+import random as rnd
+import collections
+import math
+from numpy import matlib as mtl
+import seaborn as sns
+import statsmodels.api as sm
+from statsmodels.sandbox.regression.predstd import wls_prediction_std
+from sklearn.preprocessing import PolynomialFeatures
+
+#Import and read the data:
+train_x = pd.read_csv('football_train_x.csv')
+train_y = pd.read_csv('football_train_y.csv')
+test_x = pd.read_csv('football_test_x.csv')
+test_y = pd.read_csv('football_test_y.csv')
+#Train sets concatenated, without the classification layer "Interest":
+all_trains = pd.concat([train_y[train_y.columns[1]], train_x], axis=1)
+#Test sets concatenated, without the classification layer "Interest":
+all_tests = pd.concat([test_y[test_y.columns[1]], test_x], axis=1)
+#Everything concatenated:
+all_data = pd.concat([all_trains, all_tests])
+print(test_y)
+
+#Sections 1&2
+
+#Variables for the regression
+X = all_trains[all_trains.columns[1:14]]
+print(X)
+y = all_trains[all_trains.columns[0]]
+print(y)
+
+#Linear model with SKLearn
+lm = sklearn.linear_model.LinearRegression()
+lm.fit(X,y)
+y_pred_1 = lm.predict(X)
+print(lm.coef_)
+print(lm.intercept_)
+#R2 and RMSE
+r2_1 = sklearn.metrics.r2_score(y, y_pred_1)
+print(r2_1)
+rmse_1 = np.sqrt(sklearn.metrics.mean_squared_error(y, y_pred_1))
+print(rmse_1)
+
+#Statsmodels without a constant
+lm2 = sm.OLS(y,X).fit()
+y_pred_2 = lm2.predict(X)
+lm2.summary()
+#R2 and RMSE
+r2_2 = sm.regression.linear_model.RegressionResults.rsquared(lm2)
+print(r2_2)
+rmse_2 = sm.tools.eval_measures.rmse(y, y_pred_2)
+print(rmse_2)
+
+#Statsmodels with a constant
+X_constant = sm.add_constant(X)
+lm3 = sm.OLS(y,X_constant).fit()
+y_pred_3 = lm3.predict(X_constant)
+lm3.summary()
+#R2 and RMSE
+r2_3 = sm.regression.linear_model.RegressionResults.rsquared(lm3)
+print(r2_3)
+rmse_3 = sm.tools.eval_measures.rmse(y, y_pred_3)
+print(rmse_3)
+
+#Quadratic model
+poly = PolynomialFeatures(degree = 2) 
+X_poly = poly.fit_transform(X) 
+lm4 = sklearn.linear_model.LinearRegression()
+lm4.fit(X_poly, y) 
+y_poly_pred = lm4.predict(X_poly)
+print(lm4.coef_)
+print(lm4.intercept_)
+#R2 and RMSE
+r2_4 = sklearn.metrics.r2_score(y, y_poly_pred)
+print(r2_4)
+rmse_4 = np.sqrt(sklearn.metrics.mean_squared_error(y, y_poly_pred))
+print(rmse_4)
+
+#Statsmodels without a constant to predict FTG in the test set
+#Save the coefficients
+coeffs_1 = lm2.params
+#Count new y's for the test set
+y_regression = test_x @ coeffs_1
+print(y_regression)
+
+# Section 3
+
+#PCA for the train set
+
+#Preparation: standardize and normalize the dataset
+
+#Standardisation
+mean_trains = train_x.mean(axis=0)
+std_trains = train_x.std(axis=0)
+train_x_stand = (train_x - mean_trains)/std_trains
+#Normalisation
+train_x_norm = (train_x - train_x.min(axis=0))/(train_x.max(axis=0) - train_x.min(axis=0))
+#Correlation matrix
+train_x_corr = train_x.corr()
+
+#Eigenvalues and eigenvectors for conducting the PCA:
+
+#Eigenvalues and eigenvectors calculated from the covariance matrix:
+eigenValuesTrain, eigenVectorsTrain = np.linalg.eig(train_x_corr)
+#Sort (in place) from largest to smallest eigenvalue and then sort the eigenvectors in the same order
+idx = eigenValuesTrain.argsort()[::-1]
+eigenValuesTrain = eigenValuesTrain[idx]
+eigenVectorsTrain = eigenVectorsTrain[:, idx]
+#PCA dataframe
+pca_df_train = pd.DataFrame()
+for i in range(eigenVectorsTrain.shape[1]):
+        pca_df_train['PCA_cmp' + str(i + 1)] = eigenVectorsTrain[:, i] @ train_x_stand.T
+        
+#Cumulative explained variance
+
+# Helper function to explain variance
+def explain_variance(orig_var, pca_var):
+    orig_var_total = sum(orig_var)
+    pca_var_total = sum(pca_var)
+    # cumsum()
+    orig_cum = np.cumsum(orig_var)
+    pca_cum = np.cumsum(pca_var)
+    # turn cumsum() to percentages
+    orig_cum = [x / orig_var_total for x in orig_cum]
+    pca_cum = [x / pca_var_total for x in pca_cum]
+    
+    for i in range(len(pca_cum)):
+        print(f'Percentage covered by PCA with {i+1} dimension: {pca_cum[i]}')
+
+    print('Original var cumsum\n', orig_cum)
+    print('Var cumsum after pca\n', pca_cum)
+
+    f, ax = plt.subplots()
+    ax.plot(range(1, 1 + len(orig_cum)), orig_cum, '--bo', label='Original variance per column')
+    ax.plot(range(1, 1 + len(pca_cum)), pca_cum, '-ro', label='PCA explained variance per component')
+    plt.minorticks_on()
+    plt.grid(b=True, which='major', linestyle='-')
+    plt.grid(b=True, which='minor', linestyle=':')
+    plt.show()
+
+# Compute variances by column
+orig_var_train = train_x_norm.var().tolist()
+pca_var_train = pca_df_train.var().tolist()
+
+
+#PCA for the test set
+
+#Preparation: standardize and normalize the dataset
+
+#Standardisation
+mean_tests = test_x.mean(axis=0)
+std_tests = test_x.std(axis=0)
+test_x_stand = (test_x - mean_tests)/std_tests
+#Normalisation
+test_x_norm = (test_x - test_x.min(axis=0))/(test_x.max(axis=0) - test_x.min(axis=0))
+#Correlation matrix
+test_x_corr = test_x.corr()
+
+#Eigenvalues and eigenvectors for conducting the PCA:
+
+#Eigenvalues and eigenvectors calculated from the covariance matrix:
+eigenValuesTest, eigenVectorsTest = np.linalg.eig(test_x_corr)
+#Sort (in place) from largest to smallest eigenvalue and then sort the eigenvectors in the same order
+idx = eigenValuesTest.argsort()[::-1]
+eigenValuesTest = eigenValuesTest[idx]
+eigenVectorsTest = eigenVectorsTest[:, idx]
+#PCA dataframe
+pca_df_test = pd.DataFrame()
+for i in range(eigenVectorsTest.shape[1]):
+        pca_df_test['PCA_cmp' + str(i + 1)] = eigenVectorsTest[:, i] @ test_x_stand.T
+        
+#Cumulative explained variance
+
+orig_var_test = test_x_norm.var().tolist()
+pca_var_test = pca_df_test.var().tolist()
+
+explain_variance(orig_var_test, pca_var_test)
+
+explain_variance(orig_var_train, pca_var_train)
+
+
+#Datasets of 9 first PCA components
+X_pca_train = pca_df_train[pca_df_train.columns[0:9]]
+X_pca_test = pca_df_test[pca_df_test.columns[0:9]]
+
+#Statsmodel regression for the train set, using the PCA components
+lm5 = sm.OLS(y,X_pca_train).fit()
+y_pred_5 = lm5.predict(X_pca_train)
+lm5.summary()
+#R2 and RMSE of Statsmodel PCA regression
+r2_5 = sm.regression.linear_model.RegressionResults.rsquared(lm5)
+print(r2_5)
+rmse_5 = sm.tools.eval_measures.rmse(y, y_pred_5)
+print(rmse_5)
+
+#SKLearn regression for the train set, using the PCA components
+lm6 = sklearn.linear_model.LinearRegression()
+lm6.fit(X_pca_train,y)
+y_pred_6 = lm6.predict(X_pca_train)
+print(lm6.coef_)
+print(lm6.intercept_)
+#R2 and RMSE of SKLearn PCA regression
+r2_6 = sklearn.metrics.r2_score(y, y_pred_6)
+print(r2_6)
+rmse_6 = np.sqrt(sklearn.metrics.mean_squared_error(y, y_pred_6))
+print(rmse_6)
+
+#Save the coefficients of Statsmodel PCA regression
+coeffs_2 = lm5.params
+#Save the coefficients of SKLearn PCA regression
+coeffs_3 = lm6.coef_
+#Multiply coefficients and the PCA components to get the PCR estimator
+y_pca_statsmodel = X_pca_test @ coeffs_2
+y_pca_sklearn = X_pca_test @ coeffs_3
+
+#Compare the results with histograms
+
+#True
+plt.hist(test_y[test_y.columns[1]], bins = [-3,-2,-1,0,1,2,3,4,5,6,7,8,9])
+plt.title('True values of FTG')
+plt.show()
+#OLS regression predictions
+plt.hist(y_regression, bins = [-3,-2,-1,0,1,2,3,4,5,6,7,8,9])
+plt.title('OLS regression predictions of FTG')
+plt.show()
+#PCA regression predictions
+plt.hist(y_pca_sklearn, bins = [-3,-2,-1,0,1,2,3,4,5,6,7,8,9])
+plt.title('PCA regression predictions of FTG')
+plt.show()
